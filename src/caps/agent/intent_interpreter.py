@@ -15,7 +15,8 @@ import logging
 import os
 from typing import Any, Dict
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ class IntentInterpreter:
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-1.5-flash",
+        model_name: str = "gemini-2.5-flash",
         temperature: float = 0.3,
     ):
         """
@@ -87,15 +88,8 @@ class IntentInterpreter:
         self.model_name = model_name
         self.temperature = temperature
 
-        # Configure Gemini
-        genai.configure(api_key=self.api_key)
-        self.model = genai.GenerativeModel(
-            model_name=self.model_name,
-            generation_config={
-                "temperature": self.temperature,
-                "response_mime_type": "application/json",
-            },
-        )
+        # Configure new Gemini client
+        self.client = genai.Client(api_key=self.api_key)
 
         self.logger = logger
         self.logger.info(f"Intent Interpreter initialized with model: {self.model_name}")
@@ -119,28 +113,21 @@ class IntentInterpreter:
             # Build prompt
             prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_input}\nOutput:"
 
-            # Call Gemini
-            response = self.model.generate_content(prompt)
+            # Call Gemini (async)
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=self.temperature,
+                ),
+            )
             
-            # Extract JSON from response
+            # Extract text from response
             raw_output = response.text.strip()
             self.logger.debug(f"LLM raw output: {raw_output}")
 
             # Parse JSON
-            try:
-                intent_data = json.loads(raw_output)
-            except json.JSONDecodeError:
-                # If JSON parsing fails, create a low-confidence error intent
-                self.logger.warning(f"LLM output was not valid JSON: {raw_output}")
-                intent_data = {
-                    "intent_type": "PAYMENT",
-                    "confidence_score": 0.0,
-                    "raw_input": user_input,
-                }
-
-            # Ensure raw_input is included
-            if "raw_input" not in intent_data:
-                intent_data["raw_input"] = user_input
+            intent_data = self._parse_json_response(raw_output, user_input)
 
             self.logger.info(f"Intent interpretation complete: {intent_data.get('intent_type')}")
             return intent_data
@@ -166,26 +153,20 @@ class IntentInterpreter:
             prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_input}\nOutput:"
 
             # Call Gemini (synchronous)
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=self.temperature,
+                ),
+            )
             
-            # Extract JSON from response
+            # Extract text from response
             raw_output = response.text.strip()
             self.logger.debug(f"LLM raw output: {raw_output}")
 
             # Parse JSON
-            try:
-                intent_data = json.loads(raw_output)
-            except json.JSONDecodeError:
-                self.logger.warning(f"LLM output was not valid JSON: {raw_output}")
-                intent_data = {
-                    "intent_type": "PAYMENT",
-                    "confidence_score": 0.0,
-                    "raw_input": user_input,
-                }
-
-            # Ensure raw_input is included
-            if "raw_input" not in intent_data:
-                intent_data["raw_input"] = user_input
+            intent_data = self._parse_json_response(raw_output, user_input)
 
             self.logger.info(f"Intent interpretation complete: {intent_data.get('intent_type')}")
             return intent_data
@@ -193,3 +174,28 @@ class IntentInterpreter:
         except Exception as e:
             self.logger.error(f"Intent interpretation failed: {e}")
             raise
+
+    def _parse_json_response(self, raw_output: str, user_input: str) -> Dict[str, Any]:
+        """Parse JSON from LLM response, handling markdown code blocks."""
+        # Handle markdown code blocks
+        if raw_output.startswith("```"):
+            lines = raw_output.split("\n")
+            # Remove first and last lines (```json and ```)
+            json_lines = [l for l in lines[1:] if not l.startswith("```")]
+            raw_output = "\n".join(json_lines)
+        
+        try:
+            intent_data = json.loads(raw_output)
+        except json.JSONDecodeError:
+            self.logger.warning(f"LLM output was not valid JSON: {raw_output}")
+            intent_data = {
+                "intent_type": "PAYMENT",
+                "confidence_score": 0.0,
+                "raw_input": user_input,
+            }
+
+        # Ensure raw_input is included
+        if "raw_input" not in intent_data:
+            intent_data["raw_input"] = user_input
+
+        return intent_data

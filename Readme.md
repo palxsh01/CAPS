@@ -316,7 +316,7 @@ graph LR
 
 ### Complete Transacion Lifecycle
 ```mermaid
-sequenceDiagram
+    sequenceDiagram
     actor User
     participant UI as Interaction Layer
     participant LLM as Intent Interpreter
