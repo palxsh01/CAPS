@@ -314,14 +314,14 @@ graph LR
 
 ## System Workflow
 
-### Complete Transaction Lifecycle
-
+### Complete Transacion Lifecycle
 ```mermaid
 sequenceDiagram
     actor User
-    participant UI as User Interface
-    participant LLM as LLM Agent
-    participant Validator as Schema Validator
+    participant UI as Interaction Layer
+    participant LLM as Intent Interpreter
+    participant Val as Schema Validator
+    participant Router as Decision Router
     participant Context as Context Evaluator
     participant Policy as Policy Engine
     participant Router as Decision Router
@@ -330,31 +330,31 @@ sequenceDiagram
     participant Ledger as Audit Ledger
     
     User->>UI: "Pay canteen ₹50"
-    UI->>LLM: Natural language input
-    LLM->>Validator: JSON Intent
+    UI->>LLM: Natural Language
+    LLM->>Val: JSON Intent
     
     alt Invalid Schema
-        Validator->>Ledger: Log PARSE_ERROR
-        Validator->>User: Reject
+        Val->>Ledger: Log PARSE_ERROR
+        Val->>UI: Show Error
     else Valid Schema
-        Validator->>Context: Request context
-        Context->>Context: Fetch balance, velocity, location
-        Context->>Policy: (Intent + Context)
-        Policy->>Policy: Evaluate Layers 1-4
+        Val->>Router: Valid Intent
+        Router->>Context: Fetch Auth Context
+        Context-->>Router: Balance, Velocity, Geo
+        Router->>Policy: Evaluate (Intent + Context)
+        Policy-->>Router: Result (APPROVE/DENY/VERIFY)
         
-        alt Policy Denies
-            Policy->>Router: DENY
-            Router->>Ledger: Log denial
-            Router->>User: Transaction denied
-        else Policy Approves
-            Policy->>Router: APPROVE
-            Router->>Consent: Request consent token
-            Consent->>User: Show consent UI
-            User->>Consent: Sign with biometric
-            Consent->>Sandbox: Signed JWT
-            Sandbox->>Sandbox: Validate hash + token
-            Sandbox->>Ledger: Log transaction
-            Sandbox->>User: Confirmation
+        alt Policy Result: DENY
+            Router->>Ledger: Log Policy Violation
+            Router->>UI: Reject Transaction
+        else Policy Result: APPROVE
+            Router->>Consent: Request Human Authorization
+            Consent->>User: Display Consent Modal
+            User->>Consent: Biometric Signature
+            Consent-->>Router: Signed JWT
+            Router->>Sandbox: Execute (Intent + JWT)
+            Note over Sandbox: Validate JWT Hash == Intent Hash
+            Sandbox->>Ledger: Append Immutable Entry
+            Sandbox->>UI: Success Confirmation
         end
     end
 ```
