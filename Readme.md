@@ -90,16 +90,22 @@ graph TB
         LLM[LLM Intent Interpreter]
     end
     
+    subgraph "Intelligence & Context Layer"
+        Memory[Session Memory]
+        RAG[RAG Vector Store]
+        Intel[Fraud Intelligence]
+    end
+
     subgraph "Deterministic Control Plane (Trust Boundary)"
         Validator[Schema Validator]
         Context[Context Evaluator]
         Policy[Policy & Risk Engine]
+        Consent[Consent Manager]
         Router[Decision Router]
     end
     
     subgraph "Execution Layer"
-        Consent[Consent Manager]
-        Sandbox[Execution Sandbox]
+        Execution[Execution Sandbox]
     end
     
     subgraph "Audit Layer"
@@ -108,19 +114,27 @@ graph TB
     
     UI --> LLM
     Voice --> LLM
+    
+    Memory --> LLM
+    RAG --> LLM
+    
     LLM -->|JSON Intent| Validator
     Validator -->|Valid Schema| Context
-    Context -->|Grounded Context| Policy
+    Context --> Policy
+    Intel --> Policy
     Policy -->|Decision| Router
     Router -->|APPROVE| Consent
     Router -->|DENY/ESCALATE| Ledger
-    Consent -->|Signed Token| Sandbox
-    Sandbox --> Ledger
+    Consent -->|Signed Token| Execution
+    Execution --> Ledger
     
     style LLM fill:#feca57
     style Policy fill:#1dd1a1
-    style Sandbox fill:#5f27cd
+    style Execution fill:#5f27cd
     style Ledger fill:#00d2d3
+    style Intel fill:#ff9ff3
+    style Memory fill:#54a0ff
+    style RAG fill:#54a0ff
 ```
 
 ### Architectural Layers
@@ -309,6 +323,51 @@ graph LR
     style C fill:#00d2d3
     style D fill:#00d2d3
 ```
+
+---
+
+### 3.9. Session Memory (Context Retention)
+
+**Role:** Conversational continuity.
+
+**Function:** Stores the last N turns of conversation to resolve ambiguous references like "pay that merchant again" or "use the same amount".
+
+**Privacy:** In-memory only. Cleared on session reset.
+
+---
+
+### 3.10. RAG Vector Store (Historical Context)
+
+**Role:** Retrieval-Augmented Generation for transaction history.
+
+**Mechanism:** 
+1. Embeds transaction history using Gemini models.
+2. Stores vectors in a local Numpy store.
+3. Retrieves relevant past transactions for queries like "How much did I spend at Starbucks last week?".
+
+---
+
+### 3.11. Fraud Intelligence (Crowdsourced)
+
+**Role:** Community-driven reputation system.
+
+**Mechanism:** Aggregates user reports to assign trust badges to merchants:
+- 🛡️ **VERIFIED_SAFE**: High trust, low scam reports.
+- 🚨 **LIKELY_SCAM**: High volume of scam reports.
+
+**Integration:** Feeds directly into Policy Layer 4 for behavioral blocking.
+
+---
+
+### 3.12. Consent Manager (Security)
+
+**Role:** Secure token issuance.
+
+**Mechanism:** 
+- Generates **JWT (JSON Web Tokens)** for authorized intents.
+- Enforces **Scope** (Merchant, Amount, Expiry).
+- **Single-Use:** Replay protection via JTI tracking.
+- **Anti-Confused-Deputy:** Validates `aud` claim matches the intended merchant.
 
 ---
 
@@ -725,16 +784,17 @@ gantt
 
 ---
 
-### Phase 5: Safety & Auditing
+### Phase 5: Memory, Intelligence & Auditing
 
-**Goal:** Harden the system for security.
+**Goal:** Add intelligent context, crowd-sourced fraud detection, and hardened security.
 
 **Tasks:**
-- Implement the Immutable Audit Ledger
-- Add structured logging to all ADK tool callbacks
-- Implement Consent Manager (JWT generation and validation)
+- Implement Session Memory and RAG Vector Store
+- Build Crowdsourced Fraud Intelligence System
+- Implement Immutable Audit Ledger (Hash-Chained)
+- Implement Consent Manager (JWT & Scoping)
 
-**Deliverable:** A secure, auditable log of all actions
+**Deliverable:** Intelligent system with memory, RAG, and crowdsourced fraud detection
 
 ---
 
