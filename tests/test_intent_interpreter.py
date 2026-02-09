@@ -1,23 +1,23 @@
 """Integration tests for LLM Intent Interpreter."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from caps.agent import IntentInterpreter
 
 
 class TestIntentInterpreter:
     """Test IntentInterpreter with mocked Gemini API."""
 
-    @patch('caps.agent.intent_interpreter.genai.GenerativeModel')
-    def test_interpret_payment_intent(self, mock_model_class):
+    @patch('caps.agent.intent_interpreter.genai.Client')
+    def test_interpret_payment_intent(self, mock_client_class):
         """Test interpretation of payment request."""
         # Mock the Gemini API response
         mock_response = Mock()
         mock_response.text = '{"intent_type": "PAYMENT", "amount": 50.0, "merchant_vpa": "canteen@vit", "confidence_score": 0.95}'
         
-        mock_model = Mock()
-        mock_model.generate_content.return_value = mock_response
-        mock_model_class.return_value = mock_model
+        mock_client = Mock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
         
         # Create interpreter with fake API key
         with patch.dict('os.environ', {'GOOGLE_API_KEY': 'fake-key'}):
@@ -30,15 +30,15 @@ class TestIntentInterpreter:
             assert result["merchant_vpa"] == "canteen@vit"
             assert result["confidence_score"] == 0.95
 
-    @patch('caps.agent.intent_interpreter.genai.GenerativeModel')
-    def test_interpret_balance_inquiry(self, mock_model_class):
+    @patch('caps.agent.intent_interpreter.genai.Client')
+    def test_interpret_balance_inquiry(self, mock_client_class):
         """Test interpretation of balance inquiry."""
         mock_response = Mock()
         mock_response.text = '{"intent_type": "BALANCE_INQUIRY", "confidence_score": 0.99}'
         
-        mock_model = Mock()
-        mock_model.generate_content.return_value = mock_response
-        mock_model_class.return_value = mock_model
+        mock_client = Mock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
         
         with patch.dict('os.environ', {'GOOGLE_API_KEY': 'fake-key'}):
             interpreter = IntentInterpreter(api_key='fake-key')
@@ -48,15 +48,15 @@ class TestIntentInterpreter:
             assert result["intent_type"] == "BALANCE_INQUIRY"
             assert result["confidence_score"] == 0.99
 
-    @patch('caps.agent.intent_interpreter.genai.GenerativeModel')
-    def test_interpret_ambiguous_low_confidence(self, mock_model_class):
+    @patch('caps.agent.intent_interpreter.genai.Client')
+    def test_interpret_ambiguous_low_confidence(self, mock_client_class):
         """Test that ambiguous input returns low confidence."""
         mock_response = Mock()
         mock_response.text = '{"intent_type": "PAYMENT", "confidence_score": 0.2}'
         
-        mock_model = Mock()
-        mock_model.generate_content.return_value = mock_response
-        mock_model_class.return_value = mock_model
+        mock_client = Mock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
         
         with patch.dict('os.environ', {'GOOGLE_API_KEY': 'fake-key'}):
             interpreter = IntentInterpreter(api_key='fake-key')
@@ -65,15 +65,15 @@ class TestIntentInterpreter:
             
             assert result["confidence_score"] < 0.5
 
-    @patch('caps.agent.intent_interpreter.genai.GenerativeModel')
-    def test_interpret_invalid_json_fallback(self, mock_model_class):
+    @patch('caps.agent.intent_interpreter.genai.Client')
+    def test_interpret_invalid_json_fallback(self, mock_client_class):
         """Test fallback when LLM returns invalid JSON."""
         mock_response = Mock()
         mock_response.text = 'This is not JSON'
         
-        mock_model = Mock()
-        mock_model.generate_content.return_value = mock_response
-        mock_model_class.return_value = mock_model
+        mock_client = Mock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
         
         with patch.dict('os.environ', {'GOOGLE_API_KEY': 'fake-key'}):
             interpreter = IntentInterpreter(api_key='fake-key')
@@ -90,15 +90,15 @@ class TestIntentInterpreter:
             with pytest.raises(ValueError, match="GOOGLE_API_KEY"):
                 IntentInterpreter()
 
-    @patch('caps.agent.intent_interpreter.genai.GenerativeModel')
-    def test_raw_input_included(self, mock_model_class):
+    @patch('caps.agent.intent_interpreter.genai.Client')
+    def test_raw_input_included(self, mock_client_class):
         """Test that raw_input is always included in result."""
         mock_response = Mock()
         mock_response.text = '{"intent_type": "PAYMENT", "amount": 100.0, "merchant_vpa": "test@vpa", "confidence_score": 0.9}'
         
-        mock_model = Mock()
-        mock_model.generate_content.return_value = mock_response
-        mock_model_class.return_value = mock_model
+        mock_client = Mock()
+        mock_client.models.generate_content.return_value = mock_response
+        mock_client_class.return_value = mock_client
         
         with patch.dict('os.environ', {'GOOGLE_API_KEY': 'fake-key'}):
             interpreter = IntentInterpreter(api_key='fake-key')

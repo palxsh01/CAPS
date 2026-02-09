@@ -70,7 +70,7 @@ class IntentInterpreter:
     def __init__(
         self,
         api_key: str | None = None,
-        model_name: str = "gemini-2.5-flash",
+        model_name: str | None = None,
         temperature: float = 0.3,
     ):
         """
@@ -78,14 +78,15 @@ class IntentInterpreter:
         
         Args:
             api_key: Google AI API key (defaults to GOOGLE_API_KEY env var)
-            model_name: Gemini model to use
+            model_name: Gemini model to use (defaults to GEMINI_MODEL env var)
             temperature: Model temperature (lower = more deterministic)
         """
         self.api_key = api_key or os.getenv("GOOGLE_API_KEY")
         if not self.api_key:
             raise ValueError("GOOGLE_API_KEY must be set in environment or passed as argument")
 
-        self.model_name = model_name
+        # Read model from env var with fallback to gemini-2.5-flash-lite
+        self.model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
         self.temperature = temperature
 
         # Configure new Gemini client
