@@ -148,8 +148,38 @@ class BalanceCheckRule(Rule):
         return True, None
 
 
+class MerchantCheckRule(Rule):
+    """Ensure merchant VPA is valid."""
+    
+    def __init__(self):
+        super().__init__(
+            name="merchant_check",
+            category=RuleCategory.HARD_INVARIANT,
+            description="Merchant VPA must be valid and known",
+            severity="critical",
+        )
+    
+    def evaluate(
+        self,
+        intent: PaymentIntent,
+        user_context: Optional[UserContext] = None,
+        merchant_context: Optional[MerchantContext] = None,
+    ) -> Tuple[bool, Optional[RuleViolation]]:
+        if intent.intent_type != IntentType.PAYMENT:
+            return True, None
+            
+        if not intent.merchant_vpa or intent.merchant_vpa.lower() == "unknown":
+            return False, self.create_violation(
+                "Payment requires a valid merchant VPA",
+                details={"merchant_vpa": intent.merchant_vpa}
+            )
+            
+        return True, None
+
+
 # Export all Layer 1 rules
 HARD_INVARIANT_RULES = [
+    MerchantCheckRule(),
     AmountLimitRule(),
     DailySpendLimitRule(),
     BalanceCheckRule(),

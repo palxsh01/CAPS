@@ -139,16 +139,33 @@ class ContextService:
         # Note: logic moved from previous iteration
         if user_id in self.users:
             user = self.users[user_id]
+            old_balance = user.wallet_balance
             if transaction.status == "success" and not transaction.is_refund:
                  user.wallet_balance -= transaction.amount
+                 print(f"DEBUG: Updated balance for {user_id}: {old_balance} -> {user.wallet_balance}")
             elif transaction.status == "success" and transaction.is_refund:
                  user.wallet_balance += transaction.amount
+                 print(f"DEBUG: Refunded balance for {user_id}: {old_balance} -> {user.wallet_balance}")
+        else:
+            print(f"DEBUG: User {user_id} not found in MOCK_USERS during update")
         
         return {
             "status": "recorded",
             "transaction_id": transaction.transaction_id,
             "user_id": user_id,
         }
+
+
+@app.get("/context/user/{user_id}", response_model=UserContext)
+async def get_user_context_endpoint(user_id: str):
+    """
+    Get user context including balance and velocity limits.
+    
+    Used by Policy Engine to enforce spending limits.
+    """
+    if context_service is None:
+        raise HTTPException(status_code=500, detail="ContextService not initialized")
+    return context_service.get_user_context(user_id)
 
 
 @app.get("/context/merchant/{merchant_vpa}", response_model=MerchantContext)
@@ -170,6 +187,7 @@ async def record_transaction_endpoint(transaction: TransactionRecord):
     
     This is called after successful payment execution to update history.
     """
+    print(f"DEBUG: Received transaction record for {transaction.user_id}: {transaction.transaction_id}")
     return context_service.record_transaction(transaction.user_id, transaction)
 
 

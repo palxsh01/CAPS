@@ -121,7 +121,9 @@ def main():
     # Initialize components
     try:
         logger.info("Initializing Intent Interpreter...")
-        interpreter = IntentInterpreter(api_key=api_key)
+        # interpreter = IntentInterpreter(api_key=api_key)
+        # Updated for Ollama (local LLM)
+        interpreter = IntentInterpreter()
         
         logger.info("Initializing Schema Validator...")
         validator = SchemaValidator()
@@ -140,7 +142,11 @@ def main():
         router = DecisionRouter()
         
         logger.info("Initializing Execution Engine...")
-        execution_engine = ExecutionEngine(failure_rate=0.05, ledger=audit_ledger)
+        execution_engine = ExecutionEngine(
+            failure_rate=0.05, 
+            ledger=audit_ledger,
+            context_service=context_client
+        )
         
         # Phase 5: Memory, Intelligence, Auditing, Security
         logger.info("Initializing Session Memory...")
@@ -319,6 +325,29 @@ def main():
                 {"intent_type": validated_intent.intent_type.value},
                 user_id=context_config.default_user_id,
             )
+
+            # Handle Non-Payment Intents
+            if validated_intent.intent_type == IntentType.BALANCE_INQUIRY:
+                try:
+                    user_context = context_client.get_user_context_sync(context_config.default_user_id)
+                    print(f"\n💰 [Balance Inquiry]")
+                    print(f"    Wallet Balance: ₹{user_context.wallet_balance:.2f}")
+                    print(f"    Daily Spend: ₹{user_context.daily_spend_today:.2f} / ₹{2000.00}") # Hardcoded limit for display
+                except Exception as e:
+                    print(f"    ❌ Failed to fetch balance: {e}")
+                print("\n" + "-" * 60 + "\n")
+                continue
+
+            if validated_intent.intent_type == IntentType.TRANSACTION_HISTORY:
+                history = execution_engine.get_transaction_history(context_config.default_user_id)
+                if history:
+                    print("\n📜 Transaction History:")
+                    for txn in history:
+                        print(f"    {txn.transaction_id}: ₹{txn.amount} → {txn.merchant_vpa} [{txn.state.value}]")
+                else:
+                    print("\n📜 No transactions yet.")
+                print("\n" + "-" * 60 + "\n")
+                continue
             
             # Step 3: Context Fetching
             print("\n🌐 [Context Service] Fetching ground truth...")
@@ -425,6 +454,14 @@ def main():
                     success=exec_result.success,
                     raw_input=user_input,
                 )
+
+                # Refresh context to show updated balance
+                if exec_result.success:
+                    try:
+                        updated_context = context_client.get_user_context_sync(context_config.default_user_id)
+                        print(f"    💰 Updated Balance: ₹{updated_context.wallet_balance:.2f}")
+                    except Exception:
+                        pass
                 
                 # Log to audit ledger
                 if exec_result.success:

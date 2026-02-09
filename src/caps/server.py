@@ -73,9 +73,7 @@ class CAPSContainer:
         self.execution_engine = ExecutionEngine(ledger=self.ledger, context_service=self.context_service)
         self.router = DecisionRouter()
         
-        self.interpreter = IntentInterpreter(
-            model_name="gemini-2.5-flash-lite",
-        )
+        self.interpreter = IntentInterpreter()
         
         logger.info("CAPS Components Initialized")
 
@@ -122,6 +120,15 @@ async def process_command(req: CommandRequest):
     try:
         intent_data = await caps.interpreter.interpret(enhanced_text)
         
+        # Check for Fail-Closed Error
+        if intent_data.get("error"):
+            logger.warning(f"Intent Interpreter unavailable: {intent_data['error']}")
+            return CommandResponse(
+                status="error",
+                message="Service temporarily unavailable (Rate Limit). Please try again in a moment.",
+                intent=intent_data
+            )
+
         # Merge resolved memory if LLM missed it
         if resolved.get("merchant_vpa") and not intent_data.get("merchant_vpa"):
             intent_data["merchant_vpa"] = resolved["merchant_vpa"]
@@ -133,7 +140,8 @@ async def process_command(req: CommandRequest):
 
     except Exception as e:
         logger.error(f"Intent parsing failed: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        # Return graceful error instead of 500
+        return CommandResponse(status="error", message=f"System Error: {str(e)}")
 
     # 2. Schema Validation (Trust Gate 1)
     validated_intent, error = caps.validator.validate_safe(intent_data)

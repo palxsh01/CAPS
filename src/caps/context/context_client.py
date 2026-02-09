@@ -98,7 +98,7 @@ class ContextClient:
             self.logger.error(f"Failed to fetch merchant context: {e}")
             raise Exception(f"Context service error: {e}")
     
-    async def record_transaction(self, transaction: TransactionRecord) -> dict:
+    async def record_transaction_async(self, transaction: TransactionRecord) -> dict:
         """
         Record a transaction for velocity tracking.
         
@@ -180,3 +180,44 @@ class ContextClient:
         except httpx.HTTPError as e:
             self.logger.error(f"Failed to fetch merchant context: {e}")
             raise Exception(f"Context service error: {e}")
+
+    def record_transaction_sync(self, user_id: str, transaction: TransactionRecord) -> dict:
+        """
+        Synchronous version of record_transaction (for CLI/Engine).
+        
+        Args:
+            user_id: User identifier (kept for interface compatibility)
+            transaction: Transaction record
+            
+        Returns:
+            Confirmation dict
+        """
+        try:
+            with httpx.Client() as client:
+                response = client.post(
+                    f"{self.base_url}/context/transaction",
+                    json=transaction.model_dump(mode='json'),
+                    timeout=5.0,
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                self.logger.info(f"Recorded transaction: {transaction.transaction_id}")
+                return result
+                
+        except httpx.HTTPError as e:
+            self.logger.error(f"Failed to record transaction: {e}")
+            raise Exception(f"Context service error: {e}")
+            
+    # Alias to match ContextService interface if needed by ExecutionEngine
+    def record_transaction(self, user_id: str, transaction: TransactionRecord) -> dict:
+        """Alias for sync execution if called synchronously by Engine."""
+        # Check if we are in an async loop provided by user? No, we can't easily detect intent.
+        # But ExecutionEngine in CLI is sync. 
+        # CAUTION: This shadows the async method if we are not careful.
+        # But the async method defined above is `async def record_transaction(self, transaction)`.
+        # Overloading by name isn't possible in Python like this. 
+        # We should NOT rename it here. We will rely on Monkey Patching or just binding in main.py?
+        # Better: Update ExecutionEngine to try `record_transaction` OR `record_transaction_sync`.
+        # OR: define `record_transaction_sync` and pass a wrapper to ExecutionEngine.
+        return self.record_transaction_sync(user_id, transaction)
