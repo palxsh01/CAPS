@@ -30,7 +30,7 @@
 
 ---
 
-## 📋 Prerequisites
+## Prerequisites
 
 Before you begin, ensure you have the following installed on your system:
 
@@ -45,7 +45,7 @@ Before you begin, ensure you have the following installed on your system:
 ### Installing Prerequisites
 
 <details>
-<summary><strong>🐧 Linux (Ubuntu/Debian)</strong></summary>
+<summary><strong>Linux (Ubuntu/Debian)</strong></summary>
 
 ```bash
 # Python 3.10+
@@ -66,7 +66,7 @@ sudo apt install git -y
 </details>
 
 <details>
-<summary><strong>🍎 macOS</strong></summary>
+<summary><strong>macOS</strong></summary>
 
 ```bash
 # Install Homebrew (if not already installed)
@@ -88,7 +88,7 @@ brew install git
 </details>
 
 <details>
-<summary><strong>🪟 Windows</strong></summary>
+<summary><strong>Windows</strong></summary>
 
 1. **Python 3.10+** — Download from [python.org](https://www.python.org/downloads/). During installation, **check "Add Python to PATH"**.
 
@@ -132,7 +132,7 @@ cd CAPS
 ### 2. Backend Setup (Python)
 
 <details>
-<summary><strong>🐧 Linux / 🍎 macOS</strong></summary>
+<summary><strong>Linux / macOS</strong></summary>
 
 ```bash
 # Create a virtual environment
@@ -148,7 +148,7 @@ pip install -e ".[dev]"
 </details>
 
 <details>
-<summary><strong>🪟 Windows (PowerShell)</strong></summary>
+<summary><strong>Windows (PowerShell)</strong></summary>
 
 ```powershell
 # Create a virtual environment
@@ -167,7 +167,7 @@ pip install -e ".[dev]"
 </details>
 
 <details>
-<summary><strong>🪟 Windows (Command Prompt)</strong></summary>
+<summary><strong>Windows (Command Prompt)</strong></summary>
 
 ```cmd
 :: Create a virtual environment
@@ -200,7 +200,7 @@ cd ..
 Create a `.env` file in the project root:
 
 <details>
-<summary><strong>🐧 Linux / 🍎 macOS</strong></summary>
+<summary><strong>Linux / macOS</strong></summary>
 
 ```bash
 cat > .env << 'EOF'
@@ -225,7 +225,7 @@ EOF
 </details>
 
 <details>
-<summary><strong>🪟 Windows (PowerShell)</strong></summary>
+<summary><strong>Windows (PowerShell)</strong></summary>
 
 ```powershell
 @"
@@ -254,7 +254,7 @@ LOG_LEVEL=INFO
 
 ---
 
-## 🚀 Running the Application
+## Running the Application
 
 ### Quick Start (Linux / macOS)
 
@@ -279,7 +279,7 @@ If the startup script doesn't work for your platform, start each component separ
 #### Terminal 1 — Backend Server
 
 <details>
-<summary><strong>🐧 Linux / 🍎 macOS</strong></summary>
+<summary><strong>Linux / macOS</strong></summary>
 
 ```bash
 # Activate the virtual environment
@@ -379,9 +379,30 @@ Traditional payment systems assume human operators with explicit intent. Agentic
 
 CAPS creates a trust boundary between AI reasoning and payment execution, ensuring that no money moves unless all deterministic safety gates pass.
 
+### Screenshots
+
+<div align="center">
+
+#### Home Screen
+The main interface with voice orb, text input, and persistent balance bar.
+
+<img src="docs/images/home.png" alt="CAPS Home Screen" width="800"/>
+
+#### Fraud Intelligence Panel
+Crowdsourced merchant reputation system with report submission and scam tracking.
+
+<img src="docs/images/fraud_intelligence.png" alt="Fraud Intelligence Panel" width="800"/>
+
+#### Transaction Logs
+Real-time transaction history with approval/denial status and confidence scores.
+
+<img src="docs/images/transaction_history.png" alt="Transaction History" width="800"/>
+
+</div>
+
 ---
 
-## 🧭 Core Philosophy
+## Core Philosophy
 
 ### 1. **Trust Gradient**
 Trust decreases as data moves up the stack (towards the LLM) and increases as it moves down (towards the Ledger).
@@ -410,7 +431,7 @@ The LLM is treated as an untrusted user input source. It interprets natural lang
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ### High-Level Architecture
 
@@ -484,7 +505,7 @@ graph TB
 
 ---
 
-## 🧩 Component Specifications
+## Component Specifications
 
 ### 3.1. Interaction Layer (Frontend)
 
@@ -687,8 +708,8 @@ graph LR
 **Role:** Community-driven reputation system.
 
 **Mechanism:** Aggregates user reports to assign trust badges to merchants:
-- 🛡️ **VERIFIED_SAFE**: High trust, low scam reports.
-- 🚨 **LIKELY_SCAM**: High volume of scam reports.
+- **VERIFIED_SAFE**: High trust, low scam reports.
+- **LIKELY_SCAM**: High volume of scam reports.
 
 **Integration:** Feeds directly into Policy Layer 4 for behavioral blocking.
 
