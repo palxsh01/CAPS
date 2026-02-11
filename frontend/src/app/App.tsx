@@ -376,16 +376,37 @@ export default function App() {
     setState("idle");
   };
 
-  const handleDelayedTimeUp = () => {
-    // Execute the delayed payment
-    if (delayedPayment) {
-      setState("executing");
-      setMessages(["Executing delayed payment..."]);
-      setTimeout(() => {
-        setState("completed");
-        setDelayedPayment(null);
-        setTimeout(() => setState("idle"), 2000);
-      }, 1500);
+  const handleDelayedTimeUp = async () => {
+    // 1. Validate we have a payment intent
+    if (!delayedPayment || !delayedPayment.intent) {
+      setDelayedPayment(null);
+      return;
+    }
+
+    // 2. Capture data needed for execution before clearing state
+    const rawInput = delayedPayment.intent.raw_input || "";
+    const mpva = delayedPayment.intent.merchant_vpa || "";
+    const amount = delayedPayment.intent.amount || 0;
+
+    // 3. Clear timer immediately to prevent re-entry / race conditions
+    // This unmounts the DelayedPaymentTimer component
+    setDelayedPayment(null);
+
+    // 4. Update UI to executing state
+    setState("executing");
+    setMessages(["Executing delayed payment..."]);
+
+    try {
+      // 5. Execute the already-approved payment
+      const result = await executeApproved(mpva, amount, rawInput);
+
+      // 6. Log it and update state to completed
+      completeTransaction(result, "approved");
+    } catch (e) {
+      console.error("Delayed execution failed", e);
+      setState("error");
+      setMessages(["Delayed execution failed."]);
+      setTimeout(() => setState("idle"), 2000);
     }
   };
 
