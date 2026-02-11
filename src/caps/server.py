@@ -81,8 +81,8 @@ class CAPSContainer:
     def __init__(self):
         self.ledger = AuditLedger()
         self.memory = SessionMemory()
-        self.context_service = ContextService()  # Direct service call (Monolith)
         self.fraud_intelligence = FraudIntelligence()
+        self.context_service = ContextService(fraud_intelligence=self.fraud_intelligence)  # Share FI instance
         self.validator = SchemaValidator()
         
         self.policy_engine = PolicyEngine()
@@ -189,6 +189,31 @@ async def get_user_state_endpoint(user_id: str):
     }
 
 
+# Helper to get current user state
+def get_user_state(uid: str):
+    u_ctx = caps.context_service.get_user_context(uid)
+    if not u_ctx:
+        from caps.context.mock_data import get_default_user
+        u_ctx = get_default_user()
+    
+    # Get recent transactions
+    recent_txns = caps.execution_engine.get_transaction_history(uid)
+    return {
+        "balance": u_ctx.wallet_balance,
+        "daily_spend": u_ctx.daily_spend_today,
+        "daily_limit": 2000.0, # Hardcoded for now, ideal matches rule
+        "trust_score": u_ctx.trust_score,
+        "recent_transactions": [
+            {
+                "merchant": t.merchant_vpa,
+                "amount": t.amount,
+                "status": t.state.value,
+                "timestamp": t.created_at.isoformat() if t.created_at else None
+            } for t in recent_txns[:10] # Return top 10 for better history
+        ]
+    }
+
+
 @app.post("/process-command", response_model=CommandResponse)
 async def process_command(req: CommandRequest):
     """
@@ -210,30 +235,6 @@ async def process_command(req: CommandRequest):
         enhanced_text = f"{enhanced_text} (amount: {resolved['amount']})"
         
     logger.info(f"Enhanced input: {enhanced_text}")
-
-    # Helper to get current user state
-    def get_user_state(uid: str):
-        u_ctx = caps.context_service.get_user_context(uid)
-        if not u_ctx:
-            from caps.context.mock_data import get_default_user
-            u_ctx = get_default_user()
-        
-        # Get recent transactions
-        recent_txns = caps.execution_engine.get_transaction_history(uid)
-        return {
-            "balance": u_ctx.wallet_balance,
-            "daily_spend": u_ctx.daily_spend_today,
-            "daily_limit": 2000.0, # Hardcoded for now, ideal matches rule
-            "trust_score": u_ctx.trust_score,
-            "recent_transactions": [
-                {
-                    "merchant": t.merchant_vpa,
-                    "amount": t.amount,
-                    "status": t.state.value,
-                    "timestamp": t.created_at.isoformat() if t.created_at else None
-                } for t in recent_txns[:3] # Top 3
-            ]
-        }
 
     # 1. Intent Interpretation
     try:
@@ -379,6 +380,31 @@ async def process_command(req: CommandRequest):
                 context_used=resolved if resolved else None,
                 user_state=get_user_state(req.user_id)
             )
+        
+        # Build merchant context from fraud intelligence if context service has none
+        # This ensures behavioral rules fire for merchants with scam reports
+        if merchant_ctx is None and merchant_intel.total_reports > 0:
+            from caps.context.models import MerchantContext
+            risk_state_map = {
+                "NEW": "NEW",
+                "WATCHLIST": "WATCHLIST",
+                "BLOCKED": "BLOCKED",
+                "TRUSTED": "TRUSTED",
+            }
+            merchant_ctx = MerchantContext(
+                merchant_vpa=intent.merchant_vpa,
+                reputation_score=max(0.0, min(1.0, merchant_intel.community_score / 100.0)),
+                is_whitelisted=False,
+                total_transactions=0,
+                successful_transactions=0,
+                refund_rate=0.0,
+                fraud_reports=merchant_intel.scam_reports,
+                risk_state=risk_state_map.get(merchant_intel.risk_state.value, "NEW"),
+            )
+            logger.info(f"Built merchant context from fraud intel for {intent.merchant_vpa}: "
+                       f"reputation={merchant_ctx.reputation_score:.2f}, "
+                       f"fraud_reports={merchant_ctx.fraud_reports}, "
+                       f"risk_state={merchant_ctx.risk_state}")
 
     # 4. Policy Evaluation
     policy_result = caps.policy_engine.evaluate(intent, user_ctx, merchant_ctx)
@@ -443,6 +469,64 @@ async def process_command(req: CommandRequest):
         },
         fraud_intel=fraud_intel_dict,
         context_used=resolved if resolved else None,
+        user_state=get_user_state(req.user_id)
+    )
+
+
+# ── User-Approved Execution ───────────────────────────────────────────
+class ApproveRequest(BaseModel):
+    user_id: str
+    merchant_vpa: str
+    amount: float
+    raw_input: str = ""
+
+@app.post("/execute-approved", response_model=CommandResponse)
+async def execute_approved(req: ApproveRequest):
+    """Execute a payment that was escalated and approved by the user."""
+    logger.info(f"User-approved execution: ₹{req.amount} → {req.merchant_vpa} from {req.user_id}")
+    
+    # Build intent directly (skip LLM — user already confirmed)
+    intent = PaymentIntent(
+        intent_type=IntentType.PAYMENT,
+        merchant_vpa=req.merchant_vpa,
+        amount=req.amount,
+        raw_input=req.raw_input,
+        confidence_score=1.0,  # User confirmed = full confidence
+    )
+    
+    # Create an APPROVE policy result (user is the policy here)
+    from caps.policy.models import PolicyResult, PolicyDecision
+    policy_result = PolicyResult(
+        decision=PolicyDecision.APPROVE,
+        reason="User-approved after escalation",
+        violations=[],
+        passed_rules=["user_approval"],
+        risk_score=0.0,
+    )
+    
+    # Route and Execute
+    record = caps.router.route(intent, policy_result, req.user_id)
+    exec_result = caps.execution_engine.execute(record)
+    
+    cmd_status = "executed" if exec_result.success else "failed"
+    
+    # Record in session memory
+    caps.memory.record_payment_attempt(
+        transaction_id=record.transaction_id,
+        merchant_vpa=req.merchant_vpa,
+        amount=req.amount,
+        decision="APPROVE",
+        success=exec_result.success,
+        raw_input=req.raw_input,
+        reference_number=exec_result.reference_number
+    )
+    
+    return CommandResponse(
+        status=cmd_status,
+        message=f"User-approved payment {'executed' if exec_result.success else 'failed'}",
+        intent=intent.model_dump(),
+        policy_decision="APPROVE",
+        execution_result=exec_result.__dict__,
         user_state=get_user_state(req.user_id)
     )
 

@@ -39,14 +39,14 @@ transaction_history: Dict[str, list[TransactionRecord]] = {}
 class ContextService:
     """Service to provide context for policy evaluation and state management."""
     
-    def __init__(self):
-        """Initialize context service."""
+    def __init__(self, fraud_intelligence: FraudIntelligence | None = None):
+        """Initialize context service with optional shared FraudIntelligence."""
         from caps.context.mock_data import MOCK_USERS, MOCK_MERCHANTS, get_default_user, get_default_merchant
         self.users = MOCK_USERS
         self.merchants = MOCK_MERCHANTS
         self.default_user = get_default_user
         self.default_merchant = get_default_merchant
-        self.fi = FraudIntelligence()
+        self.fi = fraud_intelligence or FraudIntelligence()
         
     def get_user_context(self, user_id: str) -> Optional[UserContext]:
         """Get context for a user with dynamic velocity/balance."""
@@ -90,20 +90,17 @@ class ContextService:
             base = self.default_merchant(merchant_vpa)
             
         # 2. Enrich with Real-time Intelligence
-        # We want to override the mock's risk_state with the calculated one
-        # from our Risk Logic (State Machine).
+        # Override mock defaults with live fraud intelligence data
         if hasattr(base, 'risk_state'):
-            # Fetch from FI
             score = self.fi.get_merchant_score(merchant_vpa)
-            # score.risk_state is an Enum. model expects string or Enum?
-            # MerchantContext.risk_state is str in model definition Step 1052.
-            # "risk_state: str = Field(...)"
-            # So we pass .value
             base.risk_state = score.risk_state.value
             
-            # Also update fraud reports and reputation from FI if available
-            # base.fraud_reports = score.total_reports # or scam_reports?
-            # base.reputation_score = score.community_score
+            # Enrich fraud reports and reputation from fraud intelligence
+            if score.total_reports > 0:
+                base.fraud_reports = score.scam_reports
+                # community_score is 0-100, reputation is 0-1
+                # Use community_score directly as a 0-1 ratio
+                base.reputation_score = max(0.0, min(1.0, score.community_score / 100.0))
             
         return base
 

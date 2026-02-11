@@ -8,7 +8,7 @@ import { LogsPanel } from "./components/LogsPanel";
 import { LogEntry } from "./components/LogCard";
 import { DelayedPaymentTimer } from "./components/DelayedPaymentTimer";
 import { useVoiceInput } from "../hooks/useVoiceInput";
-import { processCommand, CommandResponse, getUserState, UserState } from "../api/client";
+import { processCommand, CommandResponse, getUserState, UserState, executeApproved } from "../api/client";
 import { ScammerPanel } from "./components/ScammerPanel";
 import { TransactionHistoryPanel } from "./components/TransactionHistoryPanel";
 
@@ -40,6 +40,7 @@ export default function App() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [logsOpen, setLogsOpen] = useState(false);
   const [delayedPayment, setDelayedPayment] = useState<DelayedPayment | null>(null);
+  const [pendingApproval, setPendingApproval] = useState<CommandResponse | null>(null);
   const [scammerPanelOpen, setScammerPanelOpen] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const [textInput, setTextInput] = useState("");
@@ -265,6 +266,7 @@ export default function App() {
     } else {
       // COOLDOWN or ESCALATE -> Ask user
       setState("awaiting");
+      setPendingApproval(result); // Store pending result for approval
       steps.push("⏳ [Escalated] Manual approval required");
       setMessages([...steps]);
     }
@@ -335,21 +337,37 @@ export default function App() {
   };
 
   const handleApprove = async () => {
-    // In a real app, we would call an endpoint to approve the pending transaction
-    // For now, we simulate the execution of the last command
-    setState("executing");
-    setMessages(["User verified.", "Executing..."]);
-    await new Promise(r => setTimeout(r, 1000));
+    if (!pendingApproval || !pendingApproval.intent) {
+      setState("idle");
+      return;
+    }
 
-    // We don't have the last result stored easily if we just came from 'awaiting'
-    // Ideally we should store 'pendingResult' in state. 
-    // For this demo, we'll just log a generic success.
-    setState("completed");
-    setTimeout(() => setState("idle"), 2000);
+    setState("executing");
+    setMessages(prev => [...prev, "👤 User confirmed. Executing..."]);
+
+    try {
+      // Call backend to execute the approved transaction
+      const rawInput = pendingApproval.intent.raw_input || "";
+      const mpva = pendingApproval.intent.merchant_vpa || "";
+      const amount = pendingApproval.intent.amount || 0;
+
+      const result = await executeApproved(mpva, amount, rawInput);
+
+      // Complete transaction (logs, state update, UI completion)
+      completeTransaction(result, "approved");
+    } catch (e) {
+      console.error("Execution failed", e);
+      setState("error");
+      setMessages(["Execution failed."]);
+      setTimeout(() => setState("idle"), 2000);
+    } finally {
+      setPendingApproval(null);
+    }
   };
 
   const handleDecline = () => {
     setState("blocked");
+    setPendingApproval(null);
     setTimeout(() => setState("idle"), 2000);
   };
 

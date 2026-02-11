@@ -162,3 +162,18 @@ export const getUserState = async (userId: string = 'user_default'): Promise<Use
   const response = await apiClient.get<UserState>(`/user-state/${userId}`);
   return response.data;
 };
+
+export const executeApproved = async (
+  merchantVpa: string,
+  amount: number,
+  rawInput: string = '',
+  userId: string = 'user_default',
+): Promise<CommandResponse> => {
+  const response = await apiClient.post<CommandResponse>('/execute-approved', {
+    user_id: userId,
+    merchant_vpa: merchantVpa,
+    amount,
+    raw_input: rawInput,
+  });
+  return response.data;
+};
